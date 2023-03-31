@@ -23,20 +23,29 @@ class Player():
     def __init__(self):
         self.is_dead = False
         self.score = 0
+        self.arrows = 5
         self.position = pygame.Vector2()
         w, h = pygame.display.get_surface().get_size()
         self.position.xy = w / 2, h / 5
         self.velocity = pygame.Vector2()
         self.rotation = pygame.Vector2()
         self.offset = pygame.Vector2()
-        self.gun = Gun()
+        self.bow = Bow()
         self.drag = 100
         self.gravity_scale = 300
-        self.player_sprite = pygame.image.load('Player.png').convert_alpha()
-        self.font = pygame.font.Font("data/fonts/Montserrat-ExtraBold.ttf", 300)
+        self.player_sprite = pygame.image.load('Public/images/Link.png').convert_alpha()
+        self.font = pygame.font.Font("Public/fonts/Montserrat-ExtraBold.ttf", 300)
         self.player_sprite = pygame.transform.scale(self.player_sprite, (50, 60))
-        self.gun.set_position(self.position)
+        #set the Bow position a little bit below the player position and to the left
+        self.bow.set_position(self.position + pygame.Vector2(-12, 15))
         self.dt = 0.02
+
+
+    def check_arrows(self):
+        if self.arrows > 1:
+            return True
+        else:
+            return False
 
     def move(self):
         self.gravity()
@@ -44,12 +53,12 @@ class Player():
         self.position.x -= self.velocity.x * self.dt 
         self.position.y -= self.velocity.y * self.dt
     
-    def handle_gun(self):
-        self.gun.set_position(self.position)
+    def handle_Bow(self):
+        self.bow.set_position(self.position + pygame.Vector2(-12, 15))
         mouse_x, mouse_y = pygame.mouse.get_pos()
         rel_x, rel_y = mouse_x - self.position.x, mouse_y - self.position.y
         angle = (180 / math.pi) * -math.atan2(rel_y, rel_x)
-        self.gun.set_rotation(angle)
+        self.bow.set_rotation(angle)
 
         self.offset.x = min(rel_x, 4) if (self.offset.x > 0) else max(rel_x, -4)
         self.offset.y = min(rel_y, 4) if (self.offset.y > 0) else max(rel_y, -4)
@@ -57,14 +66,14 @@ class Player():
     def wall_detection(self):
         if(self.position.x < 0):
             self.position.x = 0
-            self.velocity = -self.velocity * 0.9
+            self.velocity = -self.velocity * 0.6
         if(self.position.x > SCREEN_WIDTH):
             self.position.x = SCREEN_WIDTH
-            self.velocity = -self.velocity * 0.9
+            self.velocity = -self.velocity * 0.6
 
         if(self.position.y < 0):
             self.position.y = 0
-            self.velocity = -self.velocity * 0.9
+            self.velocity = -self.velocity * 0.6
         if(self.position.y > SCREEN_HEIGHT):
             print("You Lost")
             print(f"Your score was {self.score}")
@@ -79,21 +88,24 @@ class Player():
     def check_state(self):
         global state
         if self.is_dead:
-            if not os.path.exists('data/highscore.json'):
-                with open('data/highscore.json', 'w') as f:
+            mixer.music.load("Public/audio/GameOverMusic.mp3")
+            mixer.music.set_volume(0.9)
+            mixer.music.play(-1)
+            if not os.path.exists('Public/highscore.json'):
+                with open('Public/highscore.json', 'w') as f:
                     json.dump({'highscore': 0}, f)
             
-            with open('data/highscore.json', 'r') as f:
-                data = json.load(f)
-                if self.score > data['highscore']:
-                    data['highscore'] = self.score
-                    with open('data/highscore.json', 'w') as f:
-                        json.dump(data, f)
+            with open('Public/highscore.json', 'r') as f:
+                Public = json.load(f)
+                if self.score > Public['highscore']:
+                    Public['highscore'] = self.score
+                    with open('Public/highscore.json', 'w') as f:
+                        json.dump(Public, f)
 
             gameOver = GameOver(self.score)
             gameOver.draw(screen)
             pygame.display.update()
-            count = 3
+            count = 5
             while count > 0:
                 print(f"Restarting in {count}")
                 time.sleep(1)
@@ -102,12 +114,13 @@ class Player():
             
 
 
-    def collision_detection(self, Coin):
-        for i in range(len(Coin.refills)):
-            other = Coin.refills[i]
+    def collision_detection(self, Arrow):
+        for i in range(len(Arrow.refills)):
+            other = Arrow.refills[i]
             if(self.get_left() < other.get_right() and self.get_right() > other.get_left() and self.get_top() < other.get_bottom() and self.get_bottom() > other.get_top()):
-                Coin.populate_refill()
+                Arrow.populate_refill()
                 self.score += 1
+                self.arrows += 1
                 print(self.score)
     
     def get_right(self):
@@ -123,68 +136,116 @@ class Player():
         return self.position.y + (self.player_sprite.get_height() / 2)
 
     def draw(self, screen):
-        self.gun.draw(screen)
+        self.bow.draw(screen)
         screen.blit(self.player_sprite, self.blit_position())
 
     def blit_position(self):
         return (self.position.x - (self.player_sprite.get_width() / 2), self.position.y - (self.player_sprite.get_height() / 2))
 
     def shoot(self):
-        mouse_x, mouse_y = pygame.mouse.get_pos()
-        rel_x, rel_y = mouse_x - self.position.x, mouse_y - self.position.y
-        vector = pygame.Vector2()
-        vector.xy = rel_x, rel_y
-        mag = vector.magnitude()
-        vector.xy /= mag
-        self.velocity.y = 0
-        self.velocity.x = 0
-        self.add_force(vector, 500)
+        if self.arrows > 0:
+            self.arrows -= 1
+            mouse_x, mouse_y = pygame.mouse.get_pos()
+            rel_x, rel_y = mouse_x - self.position.x, mouse_y - self.position.y
+            vector = pygame.Vector2()
+            vector.xy = rel_x, rel_y
+            mag = vector.magnitude()
+            vector.xy /= mag
+            self.velocity.y = 0
+            self.velocity.x = 0
+            self.add_force(vector, 250)
 
     def add_force(self, vector, magnitude):
         self.velocity.x += vector.x * magnitude
         self.velocity.y += vector.y * magnitude
 
     def display_score(self):
-        text = self.font.render(str(self.score), False, (200,200,200))
-        screen.blit(text, (285,200))
+        text = self.font.render(str(self.arrows), False, (254,254,254))
+        screen.blit(text, (285,125))
 
-class Gun():
+    
+
+
+class Explosion():
+    def __init__(self, position):
+        self.position = Vector2()
+        self.position.x = position.x
+        self.position.y = position.y
+        self.width = 100
+        self.arrow_angle = 0
+
+    def draw(self, screen):
+        self.arrow = pygame.image.load('Public/images/arrow.png')
+        self.arrow = pygame.transform.rotate(self.arrow, self.arrow_angle)
+        self.arrow = pygame.transform.scale(self.arrow, (self.width, self.width))
+        screen.blit(self.arrow, (self.position.x, self.position.y))
+
+    
+    def scale_down(self):
+        if(self.width > 0):
+            self.width -= 0.02 * 50
+
+class Bow():
     def __init__(self):
-        self.gun_sprite = None
+        self.bow_sprite = None
         self.position = pygame.Vector2()
         self.is_flipped = False
         self.position = pygame.Vector2()
         self.refresh_sprite()
+        self.explosions = []
 
 
     def refresh_sprite(self):
-        self.gun_sprite = pygame.image.load('data/images/Gun.png').convert_alpha()
-        self.gun_sprite = pygame.transform.scale(self.gun_sprite, (200, 200))
+        self.bow_sprite = pygame.image.load('Public/images/Bow.png').convert_alpha()
+        self.bow_sprite = pygame.transform.scale(self.bow_sprite, (50, 50))
 
     def draw(self, screen):
-        screen.blit(self.gun_sprite, self.blit_position())
+        screen.blit(self.bow_sprite, self.blit_position())
+        self.explode(screen)
 
     def set_position(self, position):
         self.position = position
     
     def set_rotation(self, degrees):
         self.refresh_sprite()
-        self.gun_sprite = pygame.transform.rotate(self.gun_sprite, degrees)
+        self.bow_sprite = pygame.transform.rotate(self.bow_sprite, degrees)
           
     def blit_position(self):
-        return self.position.x - (self.gun_sprite.get_width() / 2), self.position.y - (self.gun_sprite.get_height() / 2)
+        return self.position.x - (self.bow_sprite.get_width() / 2), self.position.y - (self.bow_sprite.get_height() / 2)
+    
+    def shoot(self):
+        exp_pos = Vector2()
+        exp_pos.x = self.position.x
+        exp_pos.y = self.position.y
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+        rel_x, rel_y = mouse_x - self.position.x, mouse_y - self.position.y
+        magnitude = math.sqrt(rel_x ** 2 + rel_y ** 2)
+        if magnitude > 0:
+            direction = pygame.Vector2(rel_x / magnitude, rel_y / magnitude)
+            arrow_position = self.position + direction * 10
+            explosion = Explosion(arrow_position)
+            explosion.arrow_angle = -math.degrees(math.atan2(direction.y, direction.x)) - 90
+            self.explosions.append(explosion)
+
+    def explode(self, screen):
+        for i in range(len(self.explosions)):
+            if(self.explosions[i].width <= 1):
+                self.explosions.remove(self.explosions[i])
+                break
+            self.explosions[i].scale_down()
+            self.explosions[i].draw(screen)
     
 
-class Coin:
+class Arrow:
     def __init__(self, position):
         self.position = Vector2()
         self.position.x = position.x
         self.position.y = position.y
-        self.gun_sprite = pygame.image.load('data/images/coin.png').convert_alpha()
-        self.gun_sprite = pygame.transform.scale(self.gun_sprite, (30, 40))
+        self.arrow_sprite = pygame.image.load('Public/images/StandArrow2.png').convert_alpha()
+        self.arrow_sprite = pygame.transform.scale(self.arrow_sprite, (40, 50))
 
     def draw(self, screen):
-        screen.blit(self.gun_sprite, self.position)
+        screen.blit(self.arrow_sprite, self.position)
     
     def get_right(self):
         return self.position.x + 30
@@ -203,14 +264,14 @@ class LevelBuilder:
         self.refills = []
     def populate_refill(self):
         self.refills = []
-        sound = mixer.Sound("data/audio/coincollect.mp3")
+        sound = mixer.Sound("Public/audio/Arrowcollect.mp3")
         sound.set_volume(0.1)
         sound.play()
-        for _ in range(2):
+        for i in range(2):
             pos = Vector2()
             pos.x = random.randint(100, 700)
             pos.y = random.randint(100, 500)
-            refill = Coin(pos)
+            refill = Arrow(pos)
             self.refills.append(refill)
         
             
@@ -222,25 +283,25 @@ class LevelBuilder:
 
 class Menu():
     def __init__(self):
-        mixer.music.load("data/audio/RainingVillage.mp3")
+        mixer.music.load("Public/audio/MenuMusic.ogg")
         mixer.music.set_volume(0.9)
         mixer.music.play(-1)
-        self.font = pygame.font.Font("data/fonts/Montserrat-ExtraBold.ttf", 25)
-        self.title_font = pygame.font.Font("data/fonts/Montserrat-ExtraBold.ttf", 50)
-        self.title = self.title_font.render('Coin Collector', True, (75,75,75))
+        self.font = pygame.font.Font("Public/fonts/Montserrat-ExtraBold.ttf", 25)
+        self.title_font = pygame.font.Font("Public/fonts/Montserrat-ExtraBold.ttf", 50)
+        self.title = self.title_font.render('Arrow Collector', True, (254,254,254))
         self.play_button = pygame.Rect(300, 300, 100, 50)
-        self.play_text = self.font.render('Play', True, (75,75,75))
+        self.play_text = self.font.render('Play', True, (254,254,254))
         self.quit_button = pygame.Rect(300, 400, 100, 50)
-        self.quit_text = self.font.render('Quit', True, (75,75,75))
-        self.background = pygame.image.load('data/images/Menu.jpg').convert()
+        self.quit_text = self.font.render('Quit', True, (254,254,254))
+        self.background = pygame.image.load('Public/images/Menu.jpg').convert()
         self.background = pygame.transform.scale(self.background, (SCREEN_WIDTH, SCREEN_HEIGHT))
         self.background_rect = self.background.get_rect()
         self.background_rect.center = (400, 300)
         self.highscore = 0
-        with open('data/highscore.json', 'r') as f:
-            data = json.load(f)
-            self.highscore = data['highscore']
-        self.highscore_text = self.font.render('Highscore: ' + str(self.highscore), True, (75,75,75))
+        with open('Public/highscore.json', 'r') as f:
+            Public = json.load(f)
+            self.highscore = Public['highscore']
+        self.highscore_text = self.font.render('Highscore: ' + str(self.highscore), True, (254,254,254))
 
     def draw(self, screen):
         pygame.draw.rect(screen, (100,100,100), self.play_button)
@@ -263,25 +324,23 @@ class Menu():
 class GameOver():
     def __init__(self, score):
         self.score = score
-        self.font = pygame.font.Font("data/fonts/Montserrat-ExtraBold.ttf", 25)
-        self.title_font = pygame.font.Font("data/fonts/Montserrat-ExtraBold.ttf", 50)
-        self.title = self.title_font.render('Game Over', True, (75,75,75))
-        self.score_text = self.font.render('Score: ' + str(self.score), True, (75,75,75))
-        self.background = pygame.image.load('data/images/Menu.jpg').convert()
+        self.font = pygame.font.Font("Public/fonts/Montserrat-ExtraBold.ttf", 25)
+        self.title_font = pygame.font.Font("Public/fonts/Montserrat-ExtraBold.ttf", 50)
+        self.score_text = self.font.render('Score: ' + str(self.score), True, (254,254,254))
+        self.background = pygame.image.load('Public/images/GameOver.png').convert()
         self.background = pygame.transform.scale(self.background, (SCREEN_WIDTH, SCREEN_HEIGHT))
         self.background_rect = self.background.get_rect()
         self.background_rect.center = (400, 300)
         self.highscore = 0
-        with open('data/highscore.json', 'r') as f:
-            data = json.load(f)
-            self.highscore = data['highscore']
-        self.highscore_text = self.font.render('Highscore: ' + str(self.highscore), True, (75,75,75))
+        with open('Public/highscore.json', 'r') as f:
+            Public = json.load(f)
+            self.highscore = Public['highscore']
+        self.highscore_text = self.font.render('Highscore: ' + str(self.highscore), True, (254,254,254))
 
     def draw(self, screen):
         screen.blit(self.background, self.background_rect)
-        screen.blit(self.title, (250, 100))
-        screen.blit(self.score_text, (348, 235))
-        screen.blit(self.highscore_text, (315, 325))
+        screen.blit(self.score_text, (348, 300))
+        screen.blit(self.highscore_text, (315, 340))
 
 
     def restart_game(self):
@@ -294,13 +353,13 @@ class Game():
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.clock = pygame.time.Clock()
         self.player = Player()
-        self.gun = Gun()
+        self.bow = Bow()
         self.level_builder = LevelBuilder()
         self.level_builder.populate_refill()
         self.menu = Menu()
         self.game_over = GameOver(score=0)
         self.state = 'menu'
-        self.background = pygame.image.load('data/images/SnowMap.jpg').convert()
+        self.background = pygame.image.load('Public/images/UndertaleMap.jpg').convert()
         self.background = pygame.transform.scale(self.background, (SCREEN_WIDTH, SCREEN_HEIGHT))
         self.background_rect = self.background.get_rect()
         self.background_rect.center = (400, 300)
@@ -317,7 +376,7 @@ class Game():
                         result = self.menu.check_click(cursor_pos)
                         if result == 'play':
                             self.state = 'play'
-                            mixer.music.load("data/audio/BackgroundMusic.mp3")
+                            mixer.music.load("Public/audio/MainMusic.mp3")
                             mixer.music.set_volume(0.9)
                             mixer.music.play(-1)
                         elif result == 'quit':
@@ -328,14 +387,19 @@ class Game():
                         if result == 'play':
                             self.state = 'play'
                             self.player = Player()
-                            self.gun = Gun()
+                            self.bow = Bow()
                             self.level_builder = LevelBuilder()
                             self.level_builder.populate_refill()
                         elif result == 'quit':
                             pygame.quit()
                             sys.exit()
-                    elif self.state == 'play':
+
+                #if the player presses a or d move the player 
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_SPACE:
                         self.player.shoot()
+                        if self.player.check_arrows():
+                            self.player.bow.shoot()
 
             self.screen.fill(GREY)
             self.screen.blit(self.background, self.background_rect)
@@ -343,7 +407,7 @@ class Game():
                 self.menu.draw(self.screen)
             elif self.state == 'play':
                 self.player.move()
-                self.player.handle_gun()
+                self.player.handle_Bow()
                 self.player.check_state()
                 self.player.display_score()
                 self.player.draw(self.screen)
